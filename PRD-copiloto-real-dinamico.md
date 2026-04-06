@@ -401,9 +401,213 @@ Usuário: "Daqui em diante, sempre faça X de forma Y"
      eu [ação] em [formato]."
 ```
 
+
 ---
 
-## 11. PRÓXIMOS PASSOS APÓS IMPLEMENTAÇÃO
+## 11. CONFIGURAÇÃO DO RUNTIME (openclaw.json)
+
+### 11.1 Variáveis de Ambiente e API Keys
+
+Adicionar chaves de API diretamente no runtime do OpenClaw:
+
+```json
+{
+  "env": {
+    "GEMINI_API_KEY": "sua_chave_aqui",
+    "DEEPGRAM_API_KEY": "sua_chave_aqui",
+    "APIFY_TOKEN": "seu_token_aqui"
+  }
+}
+```
+
+**Como aplicar:**
+```python
+import json
+from pathlib import Path
+p = Path.home() / '.openclaw/openclaw.json'
+obj = json.loads(p.read_text())
+obj.setdefault('env', {})['NOME_DA_CHAVE'] = 'valor'
+p.write_text(json.dumps(obj, indent=2))
+```
+
+### 11.2 Configuração de Modelo Principal e Fallback Chain
+
+Garantir que o sistema nunca caia por rate limit:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6",
+        "fallbacks": [
+          "google/gemini-3.1-pro-preview",
+          "anthropic/claude-opus-4-6",
+          "anthropic/claude-haiku-4-5",
+          "ollama/qwen2.5:7b"
+        ]
+      }
+    }
+  }
+}
+```
+
+**Lógica:** Se o modelo principal atingir rate limit → tenta próximo da lista automaticamente.
+
+**Recomendação:**
+- Principal: Claude Sonnet ou Gemini Pro
+- Fallbacks: Opus (poderoso), Haiku (rápido/barato), Ollama local (último recurso)
+- Nunca confiar em só um modelo
+
+---
+
+## 12. HEARTBEAT — CHECKLIST DE SAÚDE AUTOMÁTICO
+
+### 12.1 Estrutura do HEARTBEAT.md
+
+```markdown
+# HEARTBEAT.md
+
+## Checklist (a cada heartbeat)
+- [ ] Compromissos próximos (24-48h)
+- [ ] Tarefas pendentes em memory/pending.md
+- [ ] Ler logs/copilot-alerts quando existir
+- [ ] Prioridades continuam corretas em memory/priorities.md
+- [ ] Há algo repetido para memory/automation-candidates.md
+- [ ] Crons saudáveis
+
+## Semanal (segunda-feira)
+- [ ] Revisar projetos ativos
+- [ ] Consolidar notas diárias em topic files
+- [ ] Atualizar MEMORY.md
+- [ ] Revisar memory/automation-candidates.md
+- [ ] Revisar memory/errors-to-avoid.md
+
+## Regras
+- Se tudo ok → responder HEARTBEAT_OK
+- Se houver alerta → responder só com o alerta útil
+- Nunca alertar durante criação, gravação ou reuniões estratégicas
+```
+
+### 12.2 Configurar Cron de Heartbeat
+
+```bash
+openclaw cron create \
+  --name heartbeat-2h \
+  --every 2h \
+  --message "heartbeat check" \
+  --light-context
+```
+
+---
+
+## 13. GIT SYNC AUTOMÁTICO
+
+### 13.1 Configurar Repositório de Backup
+
+```bash
+cd /caminho/do/workspace
+git init
+git remote add origin https://github.com/SEU_USUARIO/SEU_REPO.git
+git add .
+git commit -m "Initial backup"
+git push -u origin main
+```
+
+### 13.2 Script de Sync Diário
+
+Criar em `scripts/git-sync.sh`:
+
+```bash
+#!/bin/bash
+REPO="/caminho/do/workspace"
+cd "$REPO"
+git add -A
+git commit -m "backup: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" --allow-empty
+git push origin main
+```
+
+### 13.3 Cron de Backup Diário
+
+```bash
+openclaw cron create \
+  --name git-backup-daily \
+  --cron "0 4 * * *" \
+  --message "run git backup script"
+```
+
+---
+
+## 14. INSTALAÇÃO DE SKILLS EXTERNAS
+
+### 14.1 Instalar Skill via Git
+
+```bash
+# 1. Clonar repositório da skill
+git clone https://github.com/USUARIO/nome-da-skill.git /tmp/skill-install
+
+# 2. Copiar SKILL.md para o workspace
+mkdir -p /caminho/workspace/skills/nome-da-skill
+cp /tmp/skill-install/skill/nome-da-skill/SKILL.md /caminho/workspace/skills/nome-da-skill/
+
+# 3. Copiar scripts (se existirem)
+cp /tmp/skill-install/skill/nome-da-skill/scripts/*.py /caminho/workspace/scripts/
+
+# 4. Configurar API key no openclaw.json (seção 11.1)
+```
+
+### 14.2 Estrutura de Skill Mínima
+
+```yaml
+---
+name: nome-da-skill
+description: "Quando usar esta skill. Triggers: [palavra-chave]"
+metadata:
+  openclaw:
+    emoji: "🔧"
+    requires:
+      config:
+        - env.NOME_DA_API_KEY
+---
+
+# Nome da Skill
+
+## Workflow
+1. Identificar pedido do usuário
+2. Executar via script
+3. Retornar resultado no chat por padrão
+
+## Comandos
+python3 scripts/nome-da-skill.py --prompt "..."
+```
+
+---
+
+## 15. SCORE DE AUTOMAÇÃO
+
+### 15.1 Como Aumentar o Score
+
+| Ação | Impacto estimado |
+|---|---|
+| Cron de heartbeat | +1.0 |
+| Cron de pending review | +1.0 |
+| Cron de git backup | +0.5 |
+| Learnings consolidation | +1.0 |
+| Playbooks com trigger claro | +0.5/each |
+| Registrar automation-candidates | +0.5 |
+| Fallback chain configurado | +0.5 |
+
+**Meta recomendada:** 7.0+/10
+
+### 15.2 Verificar Score
+
+```bash
+openclaw status
+```
+
+---
+
+## 16. PRÓXIMOS PASSOS APÓS IMPLEMENTAÇÃO
 
 1. **Semana 1:** Consolidar notas diárias em topic files
 2. **Semana 2:** Primeira consolidação semanal de lessons
@@ -412,7 +616,7 @@ Usuário: "Daqui em diante, sempre faça X de forma Y"
 
 ---
 
-## 12. REFERÊNCIAS & SUPORTE
+## 17. REFERÊNCIAS & SUPORTE
 
 **Documentação OpenClaw:**
 - https://docs.openclaw.ai/
@@ -424,7 +628,7 @@ Usuário: "Daqui em diante, sempre faça X de forma Y"
 
 ---
 
-## 13. NOTAS IMPORTANTES
+## 18. NOTAS IMPORTANTES
 
 ✅ **Este PRD é totalmente dinâmico e replicável em qualquer OpenClaw**  
 ✅ **OBRIGATÓRIO: Personalizar SOUL.md, USER.md, IDENTITY.md com identidade do seu copiloto**  
